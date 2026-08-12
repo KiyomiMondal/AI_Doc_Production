@@ -37,8 +37,6 @@ GitHub Push to main
 │         ├─ merges AI-managed blocks
 │         └─ writes ai-docs/progress.md
 │
-├─ waits 30 seconds
-│
 ├─ generates architecture doc
 │    └─ scripts/generate-architecture.sh
 │         ├─ detects stack from repository files
@@ -52,8 +50,6 @@ GitHub Push to main
 │         ├─ calls Groq API
 │         ├─ merges AI-managed blocks
 │         └─ writes ai-docs/architecture.md
-│
-├─ waits 30 seconds
 │
 ├─ generates DFD doc
 │    └─ scripts/generate-dfd.sh
@@ -69,8 +65,6 @@ GitHub Push to main
 │         ├─ calls Groq API
 │         ├─ merges AI-managed Mermaid blocks
 │         └─ writes ai-docs/dfd.md
-│
-├─ waits 30 seconds
 │
 ├─ generates TODOs doc
 │    └─ scripts/generate-todos.sh
