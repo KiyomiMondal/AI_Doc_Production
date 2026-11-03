@@ -1,0 +1,132 @@
+name: 🤖 AI DevDocs Engine
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [generate-docs]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ai-devdocs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate-docs:
+    name: Generate AI Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 🧾 Prepare repository context
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git diff HEAD^ HEAD -- ':!ai-docs' > changes.diff 2>/dev/null || true
+
+          if [[ ! -s changes.diff ]]; then
+            git show --stat HEAD > changes.diff 2>/dev/null || true
+          fi
+
+          if [[ ! -s changes.diff ]]; then
+            echo "=== Repository files ===" > changes.diff
+            find . \
+              -not -path './.git/*' \
+              -not -path './context/*' \
+              -type f \
+              | sort >> changes.diff
+          fi
+
+          git log -1 --pretty=format:"%s%n%nAuthor: %an <%ae>%nDate: %ad%nHash: %H" \
+            --date=short > commit.txt
+
+          echo "=== CODEBASE SNAPSHOT ===" > codebase.txt
+          find . \
+            -not -path './.git/*' \
+            -not -path './context/*' \
+            -not -path './node_modules/*' \
+            -type f \
+            \( -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \
+               -o -name '*.py' -o -name '*.sh' -o -name '*.yml' -o -name '*.yaml' \
+               -o -name 'package.json' -o -name 'README.md' \) \
+            -print | sort | while IFS= read -r file; do
+              echo "=== FILE: $file ===" >> codebase.txt
+              head -200 "$file" >> codebase.txt
+              echo >> codebase.txt
+            done
+
+          echo "📊 Diff: $(wc -l < changes.diff) lines"
+          echo "📦 Codebase snapshot: $(wc -l < codebase.txt) lines"
+
+      - name: 🧠 Generate repository intelligence
+        run: |
+          chmod +x scripts/*.sh
+          ./scripts/generate-context.sh
+
+      - name: 📊 Generate progress.md
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ./scripts/generate-progress.sh
+          test -s ai-docs/progress.md
+
+      - name: ⏳ Wait for rate limit
+        run: sleep 30
+
+      - name: 🏛️ Generate architecture.md
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ./scripts/generate-architecture.sh
+          test -s ai-docs/architecture.md
+
+      - name: ⏳ Wait for rate limit
+        run: sleep 30
+
+      - name: 🗺️ Generate dfd.md
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ./scripts/generate-dfd.sh
+          test -s ai-docs/dfd.md
+
+      - name: ⏳ Wait for rate limit
+        run: sleep 30
+
+      - name: 📋 Generate todos.md
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ./scripts/generate-todos.sh
+          test -s ai-docs/todos.md
+
+      - name: 💾 Commit generated documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.email "ai-devdocs[bot]@users.noreply.github.com"
+          git config user.name "AI DevDocs Engine"
+          git add ai-docs/ changes.diff commit.txt
+
+          if git diff --staged --quiet; then
+            echo "No documentation changes to commit."
+            exit 0
+          fi
+
+          git commit -m "docs(ai): auto-update documentation and context [skip ci]"
+          git push origin HEAD:main
